@@ -35,6 +35,8 @@ ul{list-style:none;margin:0;padding:0}
 li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
 li:first-child{border-top:0}
 .empty{color:var(--mute);margin:0}
+.editform{width:100%}
+.editform input[type=number]{flex:0 0 90px;max-width:90px}
 .tag{font-weight:600}.meta{color:var(--mute);font-size:.85rem}
 </style>
 </head>
@@ -95,15 +97,38 @@ function renderChart() {
     `<div class="col"><b>${mins[i]}</b><div class="bar" style="height:${mins[i] / max * 100}px"></div>${d.toLocaleDateString(undefined, { weekday: 'short' })}</div>`).join('');
 }
 
+let editing = null; // the session currently being edited, or null
+
+function editForm(s) {
+  const f = document.createElement('div'); f.className = 'row editform';
+  const sel = document.createElement('select'); sel.setAttribute('aria-label', 'Subject');
+  state.subjects.forEach(n => { const o = document.createElement('option'); o.textContent = n; sel.appendChild(o); });
+  sel.value = s.subject;
+  const mins = document.createElement('input'); mins.type = 'number'; mins.min = 1; mins.max = 1440;
+  mins.value = Math.max(1, Math.round(s.ms / 60000)); mins.setAttribute('aria-label', 'Minutes');
+  const ok = document.createElement('button'); ok.textContent = 'Save changes';
+  const no = document.createElement('button'); no.textContent = 'Cancel'; no.className = 'ghost';
+  ok.onclick = () => {
+    const m = parseInt(mins.value, 10);
+    if (!(m >= 1 && m <= 1440)) { mins.focus(); return; } // minutes must be 1 to 1440
+    s.subject = sel.value; s.ms = m * 60000; editing = null; save(); renderAll();
+  };
+  no.onclick = () => { editing = null; renderList(); };
+  f.append(sel, mins, ok, no);
+  return f;
+}
+
 function renderList() {
   const ul = $('list'); ul.innerHTML = '';
   if (!state.sessions.length) { ul.innerHTML = '<p class="empty">No sessions yet. Pick a subject and start your first one.</p>'; return; }
   state.sessions.slice().reverse().slice(0, 8).forEach(s => {
     const li = document.createElement('li');
-    li.innerHTML = `<div><span class="tag"></span><div class="meta"></div></div><button class="ghost" aria-label="Delete session">Delete</button>`;
+    if (s === editing) { li.appendChild(editForm(s)); ul.appendChild(li); return; }
+    li.innerHTML = `<div><span class="tag"></span><div class="meta"></div></div><div class="row"><button class="ghost edit" aria-label="Edit session">Edit</button><button class="ghost del" aria-label="Delete session">Delete</button></div>`;
     li.querySelector('.tag').textContent = `${s.subject} · ${Math.max(1, Math.round(s.ms / 60000))} min`;  // textContent avoids HTML injection
     li.querySelector('.meta').textContent = new Date(s.start).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-    li.querySelector('button').onclick = () => { state.sessions = state.sessions.filter(x => x !== s); save(); renderAll(); };
+    li.querySelector('.del').onclick = () => { state.sessions = state.sessions.filter(x => x !== s); save(); renderAll(); };
+    li.querySelector('.edit').onclick = () => { editing = s; renderList(); };
     ul.appendChild(li);
   });
 }
