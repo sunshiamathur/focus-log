@@ -36,6 +36,9 @@ li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding
 li:first-child{border-top:0}
 .empty{color:var(--mute);margin:0}
 .editform{width:100%}
+.track{height:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.fill{height:100%;width:0;background:var(--accent);transition:width .3s}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
 .editform input[type=number]{flex:0 0 90px;max-width:90px}
 .tag{font-weight:600}.meta{color:var(--mute);font-size:.85rem}
 </style>
@@ -57,6 +60,15 @@ li:first-child{border-top:0}
     </div>
   </section>
 
+  <section class="card" aria-label="Daily goal">
+    <h2>Today's goal</h2>
+    <div class="track" id="goalBar" role="progressbar" aria-label="Daily goal progress" aria-valuemin="0" aria-valuenow="0" aria-valuemax="60"><div class="fill" id="goalFill"></div></div>
+    <div class="row" style="margin-top:12px;justify-content:space-between">
+      <span id="goalText"></span>
+      <label class="row meta">Goal (min) <input id="goalInput" type="number" min="1" max="1440" style="flex:0 0 90px;max-width:90px"></label>
+    </div>
+  </section>
+
   <section class="card" aria-label="This week">
     <h2>Last 7 days (minutes)</h2>
     <div class="chart" id="chart"></div>
@@ -71,8 +83,9 @@ li:first-child{border-top:0}
 <script>
 // ---- State & storage (try/catch: storage can be unavailable) ----
 const KEY = 'focuslog:v1';
-let state = { subjects: ['Reading', 'Coding'], sessions: [] };
+let state = { subjects: ['Reading', 'Coding'], sessions: [], goal: 60 };
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.subjects && s.sessions) state = s; } catch (e) {}
+if (!(state.goal >= 1)) state.goal = 60; // older saved data has no goal yet
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
 let startedAt = null, tick = null;
@@ -132,7 +145,15 @@ function renderList() {
     ul.appendChild(li);
   });
 }
-const renderAll = () => { renderSubjects(); renderChart(); renderList(); };
+function renderGoal() {
+  const today = Math.round(state.sessions.filter(s => dayKey(s.start) === dayKey(Date.now())).reduce((a, s) => a + s.ms, 0) / 60000);
+  $('goalText').textContent = today >= state.goal ? `Goal reached: ${today} of ${state.goal} min today` : `${today} of ${state.goal} min today`;
+  $('goalFill').style.width = Math.min(100, today / state.goal * 100) + '%';
+  $('goalBar').setAttribute('aria-valuenow', Math.min(today, state.goal));
+  $('goalBar').setAttribute('aria-valuemax', state.goal);
+  if (document.activeElement !== $('goalInput')) $('goalInput').value = state.goal;
+}
+const renderAll = () => { renderSubjects(); renderGoal(); renderChart(); renderList(); };
 
 // ---- Actions ----
 $('toggle').onclick = () => {
@@ -155,6 +176,12 @@ $('addSubject').onclick = () => {
   if (v && !state.subjects.includes(v)) { state.subjects.push(v); save(); $('newSubject').value = ''; renderSubjects(); $('subject').value = v; }
 };
 $('newSubject').addEventListener('keydown', e => { if (e.key === 'Enter') $('addSubject').click(); });
+
+$('goalInput').addEventListener('change', e => {
+  const m = parseInt(e.target.value, 10);
+  if (m >= 1 && m <= 1440) { state.goal = m; save(); } else { e.target.value = state.goal; }
+  renderGoal();
+});
 
 renderAll();
 </script>
